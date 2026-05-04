@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -128,19 +129,20 @@ func (h *Handler) updateProfile(c *gin.Context) {
 }
 
 func (h *Handler) listAddresses(c *gin.Context) {
+	p := page(c).Normalize()
 	filter := repository.AddressFilter{
 		Search:       c.Query("search"),
 		JudulAlamat:  c.Query("judul_alamat"),
 		NamaPenerima: c.Query("nama_penerima"),
 		NoTelp:       c.Query("no_telp"),
-		Page:         page(c),
+		Page:         p,
 	}
 	rows, err := h.uc.ListAddresses(authUser(c).ID, filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
 	}
-	ok(c, "GET", rows)
+	ok(c, "GET", paginated(rows, p))
 }
 
 func (h *Handler) getAddress(c *gin.Context) {
@@ -203,17 +205,18 @@ func (h *Handler) deleteAddress(c *gin.Context) {
 }
 
 func (h *Handler) listCategories(c *gin.Context) {
+	p := page(c).Normalize()
 	filter := repository.CategoryFilter{
 		Search:       c.Query("search"),
 		NamaCategory: c.Query("nama_category"),
-		Page:         page(c),
+		Page:         p,
 	}
 	rows, err := h.uc.ListCategories(filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
 	}
-	ok(c, "GET", rows)
+	ok(c, "GET", paginated(rows, p))
 }
 
 func (h *Handler) getCategory(c *gin.Context) {
@@ -366,7 +369,7 @@ func (h *Handler) getProduct(c *gin.Context) {
 }
 
 func (h *Handler) createProduct(c *gin.Context) {
-	in, err := productInput(c)
+	in, err := productInput(c, true)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "POST", err)
 		return
@@ -385,7 +388,7 @@ func (h *Handler) updateProduct(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "PUT", err)
 		return
 	}
-	in, err := productInput(c)
+	in, err := productInput(c, false)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "PUT", err)
 		return
@@ -506,32 +509,56 @@ func authResponse(user domain.User, token string) domain.AuthResponse {
 	}
 }
 
-func productInput(c *gin.Context) (usecase.ProductInput, error) {
-	categoryID, err := strconv.ParseUint(c.PostForm("category_id"), 10, 64)
-	if err != nil {
-		return usecase.ProductInput{}, err
+func productInput(c *gin.Context, requireAll bool) (usecase.ProductInput, error) {
+	in := usecase.ProductInput{
+		NamaProduk: c.PostForm("nama_produk"),
+		Photos:     multipartFiles(c, "photos"),
 	}
-	hargaReseller, err := strconv.ParseInt(c.PostForm("harga_reseller"), 10, 64)
-	if err != nil {
-		return usecase.ProductInput{}, err
+	if val, ok := c.GetPostForm("category_id"); ok && val != "" {
+		parsed, err := strconv.ParseUint(val, 10, 64)
+		if err != nil {
+			return usecase.ProductInput{}, err
+		}
+		in.CategoryID = uint(parsed)
+		in.HasCategoryID = true
+	} else if requireAll {
+		return usecase.ProductInput{}, fmt.Errorf("category_id is required")
 	}
-	hargaKonsumen, err := strconv.ParseInt(c.PostForm("harga_konsumen"), 10, 64)
-	if err != nil {
-		return usecase.ProductInput{}, err
+	if val, ok := c.GetPostForm("harga_reseller"); ok && val != "" {
+		parsed, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return usecase.ProductInput{}, err
+		}
+		in.HargaReseller = parsed
+		in.HasHargaReseller = true
+	} else if requireAll {
+		return usecase.ProductInput{}, fmt.Errorf("harga_reseller is required")
 	}
-	stok, err := strconv.Atoi(c.PostForm("stok"))
-	if err != nil {
-		return usecase.ProductInput{}, err
+	if val, ok := c.GetPostForm("harga_konsumen"); ok && val != "" {
+		parsed, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return usecase.ProductInput{}, err
+		}
+		in.HargaKonsumen = parsed
+		in.HasHargaKonsumen = true
+	} else if requireAll {
+		return usecase.ProductInput{}, fmt.Errorf("harga_konsumen is required")
 	}
-	return usecase.ProductInput{
-		NamaProduk:    c.PostForm("nama_produk"),
-		CategoryID:    uint(categoryID),
-		HargaReseller: hargaReseller,
-		HargaKonsumen: hargaKonsumen,
-		Stok:          stok,
-		Deskripsi:     c.PostForm("deskripsi"),
-		Photos:        multipartFiles(c, "photos"),
-	}, nil
+	if val, ok := c.GetPostForm("stok"); ok && val != "" {
+		parsed, err := strconv.Atoi(val)
+		if err != nil {
+			return usecase.ProductInput{}, err
+		}
+		in.Stok = parsed
+		in.HasStok = true
+	} else if requireAll {
+		return usecase.ProductInput{}, fmt.Errorf("stok is required")
+	}
+	if val, ok := c.GetPostForm("deskripsi"); ok {
+		in.Deskripsi = val
+		in.HasDeskripsi = true
+	}
+	return in, nil
 }
 
 func page(c *gin.Context) repository.PageFilter {

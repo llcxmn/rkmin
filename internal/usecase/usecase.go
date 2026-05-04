@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"rkmin/internal/domain"
 	"rkmin/internal/repository"
@@ -208,13 +209,18 @@ func (u *Usecase) UpdateStore(userID, storeID uint, name string, photoFiles []*m
 }
 
 type ProductInput struct {
-	NamaProduk    string
-	CategoryID    uint
-	HargaReseller int64
-	HargaKonsumen int64
-	Stok          int
-	Deskripsi     string
-	Photos        []*multipart.FileHeader
+	NamaProduk       string
+	CategoryID       uint
+	HasCategoryID    bool
+	HargaReseller    int64
+	HasHargaReseller bool
+	HargaKonsumen    int64
+	HasHargaKonsumen bool
+	Stok             int
+	HasStok          bool
+	Deskripsi        string
+	HasDeskripsi     bool
+	Photos           []*multipart.FileHeader
 }
 
 func (u *Usecase) ListProducts(filter repository.ProductFilter) ([]domain.Product, error) {
@@ -226,6 +232,12 @@ func (u *Usecase) GetProduct(id uint) (domain.Product, error) {
 }
 
 func (u *Usecase) CreateProduct(userID uint, in ProductInput) (uint, error) {
+	if strings.TrimSpace(in.NamaProduk) == "" {
+		return 0, errors.New("nama_produk is required")
+	}
+	if !in.HasCategoryID || !in.HasHargaReseller || !in.HasHargaKonsumen || !in.HasStok {
+		return 0, errors.New("category_id, harga_reseller, harga_konsumen, and stok are required")
+	}
 	store, err := u.repo.FindMyStore(userID)
 	if err != nil {
 		return 0, err
@@ -241,7 +253,7 @@ func (u *Usecase) CreateProduct(userID uint, in ProductInput) (uint, error) {
 		TokoID:        store.ID,
 		CategoryID:    in.CategoryID,
 		NamaProduk:    in.NamaProduk,
-		Slug:          slugify(in.NamaProduk),
+		Slug:          slugify(fmt.Sprintf("%s-%d", in.NamaProduk, time.Now().UnixNano())),
 		HargaReseller: in.HargaReseller,
 		HargaKonsumen: in.HargaKonsumen,
 		Stok:          in.Stok,
@@ -251,6 +263,9 @@ func (u *Usecase) CreateProduct(userID uint, in ProductInput) (uint, error) {
 		product.Photos = append(product.Photos, domain.ProductPhoto{URL: path})
 	}
 	if err := u.repo.CreateProduct(&product); err != nil {
+		return 0, err
+	}
+	if err := u.repo.UpdateProductSlug(product.ID, slugify(fmt.Sprintf("%s-%d", in.NamaProduk, product.ID))); err != nil {
 		return 0, err
 	}
 	return product.ID, nil
@@ -268,16 +283,28 @@ func (u *Usecase) UpdateProduct(userID, productID uint, in ProductInput) error {
 	if product.TokoID != store.ID {
 		return ErrForbidden
 	}
-	if _, err := u.repo.FindCategory(in.CategoryID); err != nil {
-		return err
+	if in.HasCategoryID {
+		if _, err := u.repo.FindCategory(in.CategoryID); err != nil {
+			return err
+		}
+		product.CategoryID = in.CategoryID
 	}
-	product.NamaProduk = in.NamaProduk
-	product.Slug = slugify(fmt.Sprintf("%s-%d", in.NamaProduk, product.ID))
-	product.CategoryID = in.CategoryID
-	product.HargaReseller = in.HargaReseller
-	product.HargaKonsumen = in.HargaKonsumen
-	product.Stok = in.Stok
-	product.Deskripsi = in.Deskripsi
+	if strings.TrimSpace(in.NamaProduk) != "" {
+		product.NamaProduk = in.NamaProduk
+		product.Slug = slugify(fmt.Sprintf("%s-%d", in.NamaProduk, product.ID))
+	}
+	if in.HasHargaReseller {
+		product.HargaReseller = in.HargaReseller
+	}
+	if in.HasHargaKonsumen {
+		product.HargaKonsumen = in.HargaKonsumen
+	}
+	if in.HasStok {
+		product.Stok = in.Stok
+	}
+	if in.HasDeskripsi {
+		product.Deskripsi = in.Deskripsi
+	}
 	replace := len(in.Photos) > 0
 	if replace {
 		paths, err := u.upload(in.Photos)

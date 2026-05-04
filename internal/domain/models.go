@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"gorm.io/gorm"
@@ -112,19 +113,28 @@ type TransactionDetail struct {
 }
 
 type ProductLog struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	ProductID     uint      `gorm:"index;not null" json:"product_id"`
-	TokoID        uint      `gorm:"index;not null" json:"toko_id"`
-	CategoryID    uint      `gorm:"index;not null" json:"category_id"`
-	NamaProduk    string    `gorm:"size:255;not null" json:"nama_produk"`
-	Slug          string    `gorm:"size:255;not null" json:"slug"`
-	HargaReseller int64     `gorm:"not null" json:"harga_reseller"`
-	HargaKonsumen int64     `gorm:"not null" json:"harga_konsumen"`
-	Deskripsi     string    `gorm:"type:text" json:"deskripsi"`
-	CreatedAt     time.Time `json:"created_at"`
-	Toko          Toko      `json:"toko"`
-	Category      Category  `json:"category"`
-	PhotosJSON    string    `gorm:"type:json" json:"-"`
+	ID            uint           `gorm:"primaryKey" json:"id"`
+	ProductID     uint           `gorm:"index;not null" json:"product_id"`
+	TokoID        uint           `gorm:"index;not null" json:"toko_id"`
+	CategoryID    uint           `gorm:"index;not null" json:"category_id"`
+	NamaProduk    string         `gorm:"size:255;not null" json:"nama_produk"`
+	Slug          string         `gorm:"size:255;not null" json:"slug"`
+	HargaReseller int64          `gorm:"not null" json:"harga_reseller"`
+	HargaKonsumen int64          `gorm:"not null" json:"harga_konsumen"`
+	Deskripsi     string         `gorm:"type:text" json:"deskripsi"`
+	CreatedAt     time.Time      `json:"created_at"`
+	Toko          Toko           `json:"toko"`
+	Category      Category       `json:"category"`
+	PhotosJSON    string         `gorm:"type:json" json:"-"`
+	Photos        []ProductPhoto `gorm:"-" json:"photos"`
+}
+
+func (p *ProductLog) AfterFind(tx *gorm.DB) error {
+	if p.PhotosJSON == "" {
+		return nil
+	}
+	_ = json.Unmarshal([]byte(p.PhotosJSON), &p.Photos)
+	return nil
 }
 
 func AutoMigrateModels(db *gorm.DB) error {

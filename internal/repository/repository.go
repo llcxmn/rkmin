@@ -237,6 +237,10 @@ func (r *Repositories) CreateProduct(product *domain.Product) error {
 	return r.DB.Create(product).Error
 }
 
+func (r *Repositories) UpdateProductSlug(id uint, slug string) error {
+	return r.DB.Model(&domain.Product{}).Where("id = ?", id).Update("slug", slug).Error
+}
+
 func (r *Repositories) UpdateProduct(product *domain.Product, replacePhotos bool) error {
 	return r.DB.Transaction(func(tx *gorm.DB) error {
 		if replacePhotos {

@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"mime/multipart"
+	nethttp "net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,15 @@ import (
 
 type Uploader struct {
 	dir string
+}
+
+const maxUploadSize = 5 << 20
+
+var allowedImageExt = map[string]bool{
+	".jpg":  true,
+	".jpeg": true,
+	".png":  true,
+	".webp": true,
 }
 
 func NewUploader(dir string) (*Uploader, error) {
@@ -28,6 +38,9 @@ func (u *Uploader) Save(files []*multipart.FileHeader) ([]string, error) {
 		if file == nil {
 			continue
 		}
+		if err := validateUpload(file); err != nil {
+			return nil, err
+		}
 		name := safeFilename(file.Filename)
 		stored := fmt.Sprintf("%d-%s", time.Now().UnixNano(), name)
 		target := filepath.Join(u.dir, stored)
@@ -37,6 +50,32 @@ func (u *Uploader) Save(files []*multipart.FileHeader) ([]string, error) {
 		paths = append(paths, filepath.ToSlash(filepath.Join(u.dir, stored)))
 	}
 	return paths, nil
+}
+
+func validateUpload(file *multipart.FileHeader) error {
+	if file.Size > maxUploadSize {
+		return fmt.Errorf("file %s exceeds maximum size 5MB", file.Filename)
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedImageExt[ext] {
+		return fmt.Errorf("file %s must be jpg, jpeg, png, or webp", file.Filename)
+	}
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	buf := make([]byte, 512)
+	n, err := src.Read(buf)
+	if err != nil && n == 0 {
+		return err
+	}
+	contentType := nethttp.DetectContentType(buf[:n])
+	if !strings.HasPrefix(contentType, "image/") {
+		return fmt.Errorf("file %s must be an image", file.Filename)
+	}
+	return nil
 }
 
 func saveUploadedFile(file *multipart.FileHeader, dst string) error {
