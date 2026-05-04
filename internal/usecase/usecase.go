@@ -93,8 +93,8 @@ func (u *Usecase) UpdateUser(userID uint, req domain.UpdateUserRequest) (domain.
 	return u.repo.FindUserByID(userID)
 }
 
-func (u *Usecase) ListAddresses(userID uint, page repository.PageFilter) ([]domain.Alamat, error) {
-	return u.repo.ListAddresses(userID, page)
+func (u *Usecase) ListAddresses(userID uint, filter repository.AddressFilter) ([]domain.Alamat, error) {
+	return u.repo.ListAddresses(userID, filter)
 }
 
 func (u *Usecase) GetAddress(userID, id uint) (domain.Alamat, error) {
@@ -136,8 +136,8 @@ func (u *Usecase) DeleteAddress(userID, id uint) error {
 	return u.repo.DeleteAddress(userID, id)
 }
 
-func (u *Usecase) ListCategories() ([]domain.Category, error) {
-	return u.repo.ListCategories()
+func (u *Usecase) ListCategories(filter repository.CategoryFilter) ([]domain.Category, error) {
+	return u.repo.ListCategories(filter)
 }
 
 func (u *Usecase) GetCategory(id uint) (domain.Category, error) {
@@ -300,8 +300,8 @@ func (u *Usecase) DeleteProduct(userID, productID uint) error {
 	return u.repo.DeleteProduct(store.ID, productID)
 }
 
-func (u *Usecase) ListTransactions(userID uint, page repository.PageFilter) ([]domain.Transaction, error) {
-	return u.repo.ListTransactions(userID, page)
+func (u *Usecase) ListTransactions(userID uint, filter repository.TransactionFilter) ([]domain.Transaction, error) {
+	return u.repo.ListTransactions(userID, filter)
 }
 
 func (u *Usecase) GetTransaction(userID, id uint) (domain.Transaction, error) {

@@ -73,9 +73,31 @@ func (r *Repositories) UpdateUser(user *domain.User) error {
 	return r.DB.Save(user).Error
 }
 
-func (r *Repositories) ListAddresses(userID uint, page PageFilter) ([]domain.Alamat, error) {
+type AddressFilter struct {
+	Search       string
+	JudulAlamat  string
+	NamaPenerima string
+	NoTelp       string
+	Page         PageFilter
+}
+
+func (r *Repositories) ListAddresses(userID uint, f AddressFilter) ([]domain.Alamat, error) {
 	var rows []domain.Alamat
-	err := page.Scope(r.DB.Where("user_id = ?", userID).Order("id desc")).Find(&rows).Error
+	q := r.DB.Where("user_id = ?", userID).Order("id desc")
+	if f.Search != "" {
+		like := "%" + f.Search + "%"
+		q = q.Where("judul_alamat LIKE ? OR nama_penerima LIKE ? OR no_telp LIKE ? OR detail_alamat LIKE ?", like, like, like, like)
+	}
+	if f.JudulAlamat != "" {
+		q = q.Where("judul_alamat LIKE ?", "%"+f.JudulAlamat+"%")
+	}
+	if f.NamaPenerima != "" {
+		q = q.Where("nama_penerima LIKE ?", "%"+f.NamaPenerima+"%")
+	}
+	if f.NoTelp != "" {
+		q = q.Where("no_telp LIKE ?", "%"+f.NoTelp+"%")
+	}
+	err := f.Page.Scope(q).Find(&rows).Error
 	return rows, err
 }
 
@@ -104,9 +126,25 @@ func (r *Repositories) DeleteAddress(userID, id uint) error {
 	return nil
 }
 
-func (r *Repositories) ListCategories() ([]domain.Category, error) {
+type CategoryFilter struct {
+	Search       string
+	NamaCategory string
+	Page         PageFilter
+}
+
+func (r *Repositories) ListCategories(f CategoryFilter) ([]domain.Category, error) {
 	var rows []domain.Category
-	return rows, r.DB.Order("id asc").Find(&rows).Error
+	q := r.DB.Order("id asc")
+	if f.Search != "" {
+		q = q.Where("nama_category LIKE ?", "%"+f.Search+"%")
+	}
+	if f.NamaCategory != "" {
+		q = q.Where("nama_category LIKE ?", "%"+f.NamaCategory+"%")
+	}
+	if f.Page.Page > 0 || f.Page.Limit > 0 {
+		q = f.Page.Scope(q)
+	}
+	return rows, q.Find(&rows).Error
 }
 
 func (r *Repositories) FindCategory(id uint) (domain.Category, error) {
@@ -221,10 +259,34 @@ func (r *Repositories) DeleteProduct(storeID, id uint) error {
 	return nil
 }
 
-func (r *Repositories) ListTransactions(userID uint, page PageFilter) ([]domain.Transaction, error) {
+type TransactionFilter struct {
+	MethodBayar string
+	MinTotal    int64
+	MaxTotal    int64
+	StartDate   string
+	EndDate     string
+	Page        PageFilter
+}
+
+func (r *Repositories) ListTransactions(userID uint, f TransactionFilter) ([]domain.Transaction, error) {
 	var rows []domain.Transaction
 	q := r.trxPreload().Where("user_id = ?", userID).Order("id desc")
-	return rows, page.Scope(q).Find(&rows).Error
+	if f.MethodBayar != "" {
+		q = q.Where("method_bayar LIKE ?", "%"+f.MethodBayar+"%")
+	}
+	if f.MinTotal > 0 {
+		q = q.Where("harga_total >= ?", f.MinTotal)
+	}
+	if f.MaxTotal > 0 {
+		q = q.Where("harga_total <= ?", f.MaxTotal)
+	}
+	if f.StartDate != "" {
+		q = q.Where("DATE(created_at) >= ?", f.StartDate)
+	}
+	if f.EndDate != "" {
+		q = q.Where("DATE(created_at) <= ?", f.EndDate)
+	}
+	return rows, f.Page.Scope(q).Find(&rows).Error
 }
 
 func (r *Repositories) FindTransaction(userID, id uint) (domain.Transaction, error) {

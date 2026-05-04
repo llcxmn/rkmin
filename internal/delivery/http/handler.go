@@ -128,7 +128,14 @@ func (h *Handler) updateProfile(c *gin.Context) {
 }
 
 func (h *Handler) listAddresses(c *gin.Context) {
-	rows, err := h.uc.ListAddresses(authUser(c).ID, page(c))
+	filter := repository.AddressFilter{
+		Search:       c.Query("search"),
+		JudulAlamat:  c.Query("judul_alamat"),
+		NamaPenerima: c.Query("nama_penerima"),
+		NoTelp:       c.Query("no_telp"),
+		Page:         page(c),
+	}
+	rows, err := h.uc.ListAddresses(authUser(c).ID, filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
@@ -196,7 +203,12 @@ func (h *Handler) deleteAddress(c *gin.Context) {
 }
 
 func (h *Handler) listCategories(c *gin.Context) {
-	rows, err := h.uc.ListCategories()
+	filter := repository.CategoryFilter{
+		Search:       c.Query("search"),
+		NamaCategory: c.Query("nama_category"),
+		Page:         page(c),
+	}
+	rows, err := h.uc.ListCategories(filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
@@ -299,12 +311,13 @@ func (h *Handler) getStore(c *gin.Context) {
 }
 
 func (h *Handler) listStores(c *gin.Context) {
-	rows, err := h.uc.ListStores(c.Query("nama"), page(c))
+	p := page(c).Normalize()
+	rows, err := h.uc.ListStores(c.Query("nama"), p)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
 	}
-	ok(c, "GET", rows)
+	ok(c, "GET", paginated(rows, p))
 }
 
 func (h *Handler) updateStore(c *gin.Context) {
@@ -321,20 +334,21 @@ func (h *Handler) updateStore(c *gin.Context) {
 }
 
 func (h *Handler) listProducts(c *gin.Context) {
+	p := page(c).Normalize()
 	filter := repository.ProductFilter{
 		NamaProduk: c.Query("nama_produk"),
 		CategoryID: queryUint(c, "category_id"),
 		TokoID:     queryUint(c, "toko_id"),
 		MinHarga:   queryInt64(c, "min_harga"),
 		MaxHarga:   queryInt64(c, "max_harga"),
-		Page:       page(c),
+		Page:       p,
 	}
 	rows, err := h.uc.ListProducts(filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
 	}
-	ok(c, "GET", rows)
+	ok(c, "GET", paginated(rows, p))
 }
 
 func (h *Handler) getProduct(c *gin.Context) {
@@ -397,12 +411,21 @@ func (h *Handler) deleteProduct(c *gin.Context) {
 }
 
 func (h *Handler) listTransactions(c *gin.Context) {
-	rows, err := h.uc.ListTransactions(authUser(c).ID, page(c))
+	p := page(c).Normalize()
+	filter := repository.TransactionFilter{
+		MethodBayar: c.Query("method_bayar"),
+		MinTotal:    firstQueryInt64(c, "min_total", "min_harga"),
+		MaxTotal:    firstQueryInt64(c, "max_total", "max_harga"),
+		StartDate:   c.Query("start_date"),
+		EndDate:     c.Query("end_date"),
+		Page:        p,
+	}
+	rows, err := h.uc.ListTransactions(authUser(c).ID, filter)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "GET", err)
 		return
 	}
-	ok(c, "GET", rows)
+	ok(c, "GET", paginated(rows, p))
 }
 
 func (h *Handler) getTransaction(c *gin.Context) {
@@ -528,4 +551,23 @@ func queryUint(c *gin.Context, key string) uint {
 func queryInt64(c *gin.Context, key string) int64 {
 	val, _ := strconv.ParseInt(c.Query(key), 10, 64)
 	return val
+}
+
+func firstQueryInt64(c *gin.Context, keys ...string) int64 {
+	for _, key := range keys {
+		if c.Query(key) == "" {
+			continue
+		}
+		return queryInt64(c, key)
+	}
+	return 0
+}
+
+func paginated(data any, p repository.PageFilter) gin.H {
+	p = p.Normalize()
+	return gin.H{
+		"data":  data,
+		"page":  p.Page,
+		"limit": p.Limit,
+	}
 }
